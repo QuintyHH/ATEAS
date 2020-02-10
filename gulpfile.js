@@ -10,39 +10,41 @@ const { src, dest, watch, series, parallel } = require("gulp"),
   babel = require("gulp-babel"),
   rename = require("gulp-rename"),
   fs = require("fs"),
-  path = require("path");
+  path = require("path"),
+  imageMin = require("gulp-imagemin")
 
 // Helper functions
 function getFolderName(dir) {
-  return fs.readdirSync(dir);
+  return fs.readdirSync(dir)
 }
 
 function writeSamples(dir) {
   Object.values(sampleFiles).forEach(file => {
     fs.writeFile(`${dir}/${file}`, content, err => {
-      console.log(`[ATEAS]: ${file} was succesfully created in ${dir}`);
-    });
-  });
+      console.log(`[ATEAS]: ${file} was succesfully created in ${dir}.`)
+    })
+  })
 }
 
 // File variables
 const folders = {
     src: "src",
     shared: "src/shared",
-    variations: "src/variations/"
+    variations: "src/variations/",
+    images: "src/images/"
   },
   sampleFiles = { js: "index.js", css: "style.css", scss: "style.scss" },
-  content = `/* This is a sample file */`;
+  content = `/* This is a sample file */`
 
 //Scaffolding Tasks
 function scaffoldingFoldersTask() {
   const task = Object.values(folders).forEach(dir => {
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir);
-      console.log("[ATEAS]: Folder created:", dir);
+      fs.mkdirSync(dir)
+      console.log(`[ATEAS]: Folder created: ${dir}.`)
     }
-  });
-  return Promise.resolve(task);
+  })
+  return Promise.resolve(task)
 }
 
 function scaffoldingFilesTask() {
@@ -50,25 +52,25 @@ function scaffoldingFilesTask() {
     fs.readdir(dir, function(err, files) {
       if (!files.length) {
         if (dir == folders.shared) {
-          writeSamples(dir);
+          writeSamples(dir)
         }
 
         if (dir == folders.variations) {
-          let dirpath = `${dir}` + "/sampleVariation/";
-          fs.mkdirSync(dirpath, { recursive: true });
-          writeSamples(dirpath);
+          let dirpath = `${dir}` + "/sampleVariation/"
+          fs.mkdirSync(dirpath, { recursive: true })
+          writeSamples(dirpath)
         }
       }
-    });
-  });
-  return Promise.resolve(task);
+    })
+  })
+  return Promise.resolve(task)
 }
 
 // CSS tasks
 function mergeCssTask() {
-  let folderName = getFolderName(folders.variations);
+  let folderName = getFolderName(folders.variations)
   let tasks = folderName.map(function(filename) {
-    exactname = path.basename(filename, ".css");
+    exactname = path.basename(filename, ".css")
     return src([
       `${folders.shared}` + "/**/*.css",
       `${folders.shared}` + "/**/*.scss",
@@ -80,16 +82,16 @@ function mergeCssTask() {
       .pipe(dest(`dist/unmin/${exactname}`))
       .pipe(postcss([autoprefixer(), cssnano()]))
       .pipe(rename(filename + ".min.css"))
-      .pipe(dest(`dist/min/${exactname}`));
-  });
-  return Promise.resolve(tasks);
+      .pipe(dest(`dist/min/${exactname}`))
+  })
+  return Promise.resolve(tasks)
 }
 
 // JS tasks
 function mergeJSTask() {
-  let folderName = getFolderName(folders.variations);
+  let folderName = getFolderName(folders.variations)
   let tasks = folderName.map(function(filename) {
-    exactname = path.basename(filename, ".js");
+    exactname = path.basename(filename, ".js")
     return src([
       `${folders.shared}` + "/**/*.js",
       `${folders.variations}/${filename}` + "/**/*.js"
@@ -103,9 +105,9 @@ function mergeJSTask() {
       )
       .pipe(uglify())
       .pipe(rename(filename + ".min.js"))
-      .pipe(dest(`dist/min/${exactname}`));
-  });
-  return Promise.resolve(tasks);
+      .pipe(dest(`dist/min/${exactname}`))
+  })
+  return Promise.resolve(tasks)
 }
 
 // Watch task
@@ -113,24 +115,40 @@ function watchTask() {
   watch(
     [folders.src],
     series(backUpTask, cleanTask, parallel(mergeCssTask, mergeJSTask))
-  );
+  )
   return Promise.resolve(
-    console.log("[ATEAS]: Watching for changes in the 'src' folder.")
-  );
+    console.log(`[ATEAS]: Watching for changes in the '${folders.src}' folder.`)
+  )
+}
+
+// Image task
+function images() {
+  const task = src(`${folders.images}*`)
+    .pipe(
+      imageMin({
+        progressive: true,
+        optimizationLevel: 7, // 0-7 low-high
+        interlaced: true,
+        svgoPlugins: [{ removeViewBox: false }]
+      })
+    )
+    .pipe(dest("Processed Images"))
+  console.log("[ATEAS]: Images processed and minified.")
+  return Promise.resolve(task)
 }
 
 // Clean tasks
-
 function backUpTask() {
-  const ts = Date.now();
-  return src("dist/**/").pipe(dest(`dist [${ts}]`));
+  const ts = Date.now()
+  return src("dist/**/").pipe(dest(`dist [${ts}]`))
 }
 
 function cleanTask() {
-  return src("dist/**/").pipe(clean());
+  return src("dist/**/").pipe(clean())
 }
 
 // Default task
-exports.clean = series(backUpTask, cleanTask);
-exports.start = series(scaffoldingFoldersTask, scaffoldingFilesTask);
-exports.watch = series(parallel(mergeCssTask, mergeJSTask), watchTask);
+exports.clean = series(backUpTask, cleanTask)
+exports.start = series(scaffoldingFoldersTask, scaffoldingFilesTask)
+exports.watch = series(parallel(mergeCssTask, mergeJSTask), watchTask)
+exports.images = series(images)
