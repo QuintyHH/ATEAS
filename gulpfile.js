@@ -1,16 +1,16 @@
 // Init modules
-const { src, dest, watch, series, parallel } = require("gulp");
-const autoprefixer = require("autoprefixer");
-const cssnano = require("cssnano");
-const concat = require("gulp-concat");
-const postcss = require("gulp-postcss");
-const sass = require("gulp-sass");
-const uglify = require("gulp-uglify");
-const clean = require("gulp-clean");
-const babel = require("gulp-babel");
-var rename = require("gulp-rename");
-var fs = require("fs");
-var path = require("path");
+const { src, dest, watch, series, parallel } = require("gulp"),
+  autoprefixer = require("autoprefixer"),
+  cssnano = require("cssnano"),
+  concat = require("gulp-concat"),
+  postcss = require("gulp-postcss"),
+  sass = require("gulp-sass"),
+  uglify = require("gulp-uglify"),
+  clean = require("gulp-clean"),
+  babel = require("gulp-babel"),
+  rename = require("gulp-rename"),
+  fs = require("fs"),
+  path = require("path");
 
 // Helper functions
 function getFolderName(dir) {
@@ -27,13 +27,12 @@ function writeSamples(dir) {
 
 // File variables
 const folders = {
-  src: "src",
-  shared: "src/shared",
-  variations: "src/variations/"
-};
-
-const sampleFiles = { js: "index.js", css: "style.css", scss: "style.scss" };
-const content = `/* This is a sample file */`;
+    src: "src",
+    shared: "src/shared",
+    variations: "src/variations/"
+  },
+  sampleFiles = { js: "index.js", css: "style.css", scss: "style.scss" },
+  content = `/* This is a sample file */`;
 
 //Scaffolding Tasks
 function scaffoldingFoldersTask() {
@@ -113,12 +112,7 @@ function mergeJSTask() {
 function watchTask() {
   watch(
     [folders.src],
-    series(
-      cleanDist,
-      scaffoldingFoldersTask,
-      scaffoldingFilesTask,
-      parallel(mergeCssTask, mergeJSTask)
-    )
+    series(backUpTask, cleanTask, parallel(mergeCssTask, mergeJSTask))
   );
   return Promise.resolve(
     console.log("[ATEAS]: Watching for changes in the 'src' folder.")
@@ -126,18 +120,17 @@ function watchTask() {
 }
 
 // Clean tasks
-function cleanDist() {
+
+function backUpTask() {
   const ts = Date.now();
-  return src("dist")
-    .pipe(rename(`dist-[${ts}]`))
-    .pipe(dest("."))
-    .pipe(clean());
+  return src("dist/**/").pipe(dest(`dist [${ts}]`));
+}
+
+function cleanTask() {
+  return src("dist/**/").pipe(clean());
 }
 
 // Default task
-exports.default = series(
-  scaffoldingFoldersTask,
-  scaffoldingFilesTask,
-  parallel(mergeCssTask, mergeJSTask),
-  watchTask
-);
+exports.clean = series(backUpTask, cleanTask);
+exports.start = series(scaffoldingFoldersTask, scaffoldingFilesTask);
+exports.watch = series(parallel(mergeCssTask, mergeJSTask), watchTask);
