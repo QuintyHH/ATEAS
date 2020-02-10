@@ -12,22 +12,20 @@ var rename = require("gulp-rename");
 var fs = require("fs");
 var path = require("path");
 
-// File variables
+// Helper functions
 function getFolderName(dir) {
   return fs.readdirSync(dir);
 }
 
-const filePaths = {
-  basePath: "src",
-  sharedJsPath: "src/shared/**/*.js",
-  variationJsPath: "src/variations/",
-  sharedScssPath: "src/shared/**/*.scss",
-  sharedCssPath: "src/shared/**/*.css",
-  variationScssPath: "src/variations/",
-  variationCssPath: "src/variations/",
-  tempCssPath: "dist/temp/**/*.css"
-};
+function writeSamples(dir) {
+  sampleFiles.forEach(file => {
+    fs.writeFile(`${dir}/${file}`, content, err => {
+      console.log(`[ATEAS]: ${file} was succesfully created in ${dir}`);
+    });
+  });
+}
 
+// File variables
 const folders = {
   src: "src",
   shared: "src/shared",
@@ -39,60 +37,44 @@ const content = `/* This is a sample file */`;
 
 //Scaffolding Tasks
 function scaffoldingFoldersTask() {
-  return Promise.resolve(
-    Object.values(folders).forEach(dir => {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir);
-        console.log("[ATEAS]: Folder created:", dir);
-      }
-    })
-  );
+  const task = Object.values(folders).forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir);
+      console.log("[ATEAS]: Folder created:", dir);
+    }
+  });
+  return Promise.resolve(task);
 }
 
 function scaffoldingFilesTask() {
-  return Promise.resolve(
-    Object.values(folders).forEach(dir => {
-      fs.readdir(dir, function(err, files) {
-        if (!files.length) {
-          if (dir == folders.shared) {
-            sampleFiles.forEach(file => {
-              fs.writeFile(`${dir}/${file}`, content, err => {
-                console.log(
-                  `[ATEAS]: ${file} was succesfully created in ${dir}`
-                );
-              });
-            });
-          }
-
-          if (dir == folders.variations) {
-            let dirpath = `${dir}sampleVariation/`;
-            fs.mkdirSync(dirpath, { recursive: true });
-            sampleFiles.forEach(file => {
-              fs.writeFile(`${dirpath}/${file}`, content, err => {
-                console.log(
-                  `[ATEAS]: ${file} was succesfully created in ${dirpath}`
-                );
-              });
-            });
-          }
+  const task = Object.values(folders).forEach(dir => {
+    fs.readdir(dir, function(err, files) {
+      if (!files.length) {
+        if (dir == folders.shared) {
+          writeSamples(dir);
         }
-      });
-    })
-  );
+
+        if (dir == folders.variations) {
+          let dirpath = `${dir}` + "/sampleVariation/";
+          fs.mkdirSync(dirpath, { recursive: true });
+          writeSamples(dirpath);
+        }
+      }
+    });
+  });
+  return Promise.resolve(task);
 }
 
 // CSS tasks
 function mergeCssTask() {
-  let folderName = getFolderName(filePaths.variationJsPath);
+  let folderName = getFolderName(folders.variations);
   let tasks = folderName.map(function(filename) {
     exactname = path.basename(filename, ".css");
     return src([
-      filePaths.sharedCssPath,
-      `${filePaths.variationCssPath}/${filename}` + "/*.css",
-      `${filePaths.variationCssPath}/${filename}` + "/**/*.css",
-      filePaths.sharedScssPath,
-      `${filePaths.variationCssPath}/${filename}` + "/*.scss",
-      `${filePaths.variationCssPath}/${filename}` + "/**/*.scss"
+      `${folders.shared}` + "/**/*.css",
+      `${folders.shared}` + "/**/*.scss",
+      `${folders.variations}/${filename}` + "/**/*.css",
+      `${folders.variations}/${filename}` + "/**/*.scss"
     ])
       .pipe(sass())
       .pipe(concat(filename + ".unmin.css"))
@@ -106,13 +88,12 @@ function mergeCssTask() {
 
 // JS tasks
 function mergeJSTask() {
-  let folderName = getFolderName(filePaths.variationJsPath);
+  let folderName = getFolderName(folders.variations);
   let tasks = folderName.map(function(filename) {
     exactname = path.basename(filename, ".js");
     return src([
-      filePaths.sharedJsPath,
-      `${filePaths.variationJsPath}/${filename}/*.js`,
-      `${filePaths.variationJsPath}/${filename}/**/*.js`
+      `${folders.shared}` + "/**/*.js",
+      `${folders.variations}/${filename}` + "/**/*.js"
     ])
       .pipe(concat(filename + ".unmin.js"))
       .pipe(dest(`dist/unmin/${exactname}`))
@@ -131,25 +112,16 @@ function mergeJSTask() {
 // Watch task
 function watchTask() {
   watch(
-    [filePaths.basePath],
+    [folders.src],
     series(
       cleanDist,
       scaffoldingFoldersTask,
       scaffoldingFilesTask,
-      mergeCssTask,
-      mergeJSTask
+      parallel(mergeCssTask, mergeJSTask)
     )
   );
   return Promise.resolve(
-    console.log(
-      "-----------------------------------------------------------------"
-    ),
-    console.log(
-      "| ATEAS will now start watching for changes in the 'src' folder. |"
-    ),
-    console.log(
-      "------------------------------------------------------------------"
-    )
+    console.log("[ATEAS]: Watching for changes in the 'src' folder.")
   );
 }
 
@@ -166,7 +138,6 @@ function cleanDist() {
 exports.default = series(
   scaffoldingFoldersTask,
   scaffoldingFilesTask,
-  mergeCssTask,
-  mergeJSTask,
+  parallel(mergeCssTask, mergeJSTask),
   watchTask
 );
