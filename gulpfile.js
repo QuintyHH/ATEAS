@@ -1,3 +1,9 @@
+const config = {
+  experienceName: "testExperience",
+  accessKeyId: "",
+  secretAccessKey: ""
+}
+
 // Init modules
 const { src, dest, watch, series, parallel } = require("gulp"),
   autoprefixer = require("autoprefixer"),
@@ -12,11 +18,18 @@ const { src, dest, watch, series, parallel } = require("gulp"),
   fs = require("fs"),
   path = require("path"),
   imageMin = require("gulp-imagemin"),
-  converter = require("csvtojson")
+  converter = require("csvtojson"),
+  s3 = require("gulp-s3-upload")({
+    accessKeyId: config.accessKeyId,
+    secretAccessKey: config.secretAccessKey
+  })
 
 // Helper functions
 function getFolderName(dir) {
   return fs.readdirSync(dir)
+}
+function changeFileName(relative_filename) {
+  return `${config.experienceName}/${relative_filename}`
 }
 
 function writeSamples(dir) {
@@ -28,16 +41,16 @@ function writeSamples(dir) {
 }
 
 // File variables
-const options = { auto_parse: true }
 const folders = {
-    src: "src",
-    shared: "src/shared",
-    variations: "src/variations/",
-    images: "src/images/",
-    datasets: "src/datasets/",
-    assets: "assets",
-    procData: "assets/datasets/",
-    procImg: "assets/images/"
+    base: `${config.experienceName}`,
+    src: `src/`,
+    shared: `src/shared`,
+    variations: `src/variations/`,
+    images: `src/images/`,
+    datasets: `src/datasets/`,
+    assets: `${config.experienceName}/assets/`,
+    procData: `${config.experienceName}/assets/datasets/`,
+    procImg: `${config.experienceName}/assets/images/`
   },
   sampleFiles = { js: "index.js", css: "style.css", scss: "style.scss" },
   content = `/* This is a sample file */`
@@ -85,10 +98,10 @@ function mergeCssTask() {
     ])
       .pipe(sass())
       .pipe(concat(filename + ".unmin.css"))
-      .pipe(dest(`dist/unmin/${exactname}`))
+      .pipe(dest(`${config.experienceName}/dist/unmin/${exactname}`))
       .pipe(postcss([autoprefixer(), cssnano()]))
       .pipe(rename(filename + ".min.css"))
-      .pipe(dest(`dist/min/${exactname}`))
+      .pipe(dest(`${config.experienceName}/dist/min/${exactname}`))
   })
   return Promise.resolve(tasks)
 }
@@ -103,7 +116,7 @@ function mergeJSTask() {
       `${folders.variations}/${filename}` + "/**/*.js"
     ])
       .pipe(concat(filename + ".unmin.js"))
-      .pipe(dest(`dist/unmin/${exactname}`))
+      .pipe(dest(`${config.experienceName}/dist/unmin/${exactname}`))
       .pipe(
         babel({
           presets: ["@babel/env"]
@@ -111,7 +124,7 @@ function mergeJSTask() {
       )
       .pipe(uglify())
       .pipe(rename(filename + ".min.js"))
-      .pipe(dest(`dist/min/${exactname}`))
+      .pipe(dest(`${config.experienceName}/dist/min/${exactname}`))
   })
   return Promise.resolve(tasks)
 }
@@ -119,16 +132,18 @@ function mergeJSTask() {
 // Watch task
 function watchTask() {
   watch(
-    [folders.src],
+    [folders.shared, folders.variations],
     series(backUpTask, cleanTask, parallel(mergeCssTask, mergeJSTask))
   )
+  watch([folders.images], series(imagesTask))
+  watch([folders.datasets], series(writeJSONTask))
   return Promise.resolve(
     console.log(`[ATEAS]: Watching for changes in the '${folders.src}' folder.`)
   )
 }
 
 // Image task
-function images() {
+function imagesTask() {
   const task = src(`${folders.images}` + "*")
     .pipe(
       imageMin({
@@ -144,7 +159,7 @@ function images() {
 }
 
 // Dataset task
-function writeJSON() {
+function writeJSONTask() {
   if (!fs.existsSync(folders.procData)) {
     fs.mkdirSync(folders.procData)
     console.log(`[ATEAS]: Folder created: ${folders.procData}.`)
@@ -168,7 +183,26 @@ function writeJSON() {
 
   return Promise.resolve(task)
 }
-
+// S3 Upload task
+function upload() {
+  const task = src(`./${config.experienceName}/**`).pipe(
+    s3(
+      {
+        Bucket: "at-dev-experience",
+        ACL: "public-read",
+        keyTransform: function(name) {
+          console.log(name)
+          newName = changeFileName(name)
+          return newName
+        }
+      },
+      {
+        maxRetries: 5
+      }
+    )
+  )
+  return Promise.resolve(task)
+}
 // Clean tasks
 function backUpTask() {
   const ts = Date.now()
@@ -183,5 +217,6 @@ function cleanTask() {
 exports.clean = series(backUpTask, cleanTask)
 exports.start = series(scaffoldingFoldersTask, scaffoldingFilesTask)
 exports.watch = series(parallel(mergeCssTask, mergeJSTask), watchTask)
-exports.images = series(images)
-exports.datasets = series(writeJSON)
+exports.images = series(imagesTask)
+exports.datasets = series(writeJSONTask)
+exports.upload = series(upload)
