@@ -1,5 +1,7 @@
 const config = {
   experienceName: "testExperience",
+  bucketURI: "",
+  region: "",
   accessKeyId: "",
   secretAccessKey: ""
 }
@@ -19,6 +21,7 @@ const { src, dest, watch, series, parallel } = require("gulp"),
   path = require("path"),
   imageMin = require("gulp-imagemin"),
   converter = require("csvtojson"),
+  open = require("gulp-open"),
   s3 = require("gulp-s3-upload")({
     accessKeyId: config.accessKeyId,
     secretAccessKey: config.secretAccessKey
@@ -184,14 +187,13 @@ function writeJSONTask() {
   return Promise.resolve(task)
 }
 // S3 Upload task
-function upload() {
+function uploadToS3Task() {
   const task = src(`./${config.experienceName}/**`).pipe(
     s3(
       {
         Bucket: "at-dev-experience",
         ACL: "public-read",
         keyTransform: function(name) {
-          console.log(name)
           newName = changeFileName(name)
           return newName
         }
@@ -200,6 +202,16 @@ function upload() {
         maxRetries: 5
       }
     )
+  )
+  return Promise.resolve(task)
+}
+
+function openTask() {
+  const task = src(".").pipe(
+    open({
+      uri: `${config.bucketURI}/${config.experienceName}/${config.region}`,
+      app: "chrome"
+    })
   )
   return Promise.resolve(task)
 }
@@ -219,4 +231,4 @@ exports.start = series(scaffoldingFoldersTask, scaffoldingFilesTask)
 exports.watch = series(parallel(mergeCssTask, mergeJSTask), watchTask)
 exports.images = series(imagesTask)
 exports.datasets = series(writeJSONTask)
-exports.upload = series(upload)
+exports.upload = series(uploadToS3Task, openTask)
