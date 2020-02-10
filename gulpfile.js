@@ -18,7 +18,7 @@ function getFolderName(dir) {
 }
 
 function writeSamples(dir) {
-  sampleFiles.forEach(file => {
+  Object.values(sampleFiles).forEach(file => {
     fs.writeFile(`${dir}/${file}`, content, err => {
       console.log(`[ATEAS]: ${file} was succesfully created in ${dir}`);
     });
@@ -32,7 +32,7 @@ const folders = {
   variations: "src/variations/"
 };
 
-const sampleFiles = ["style.css", "index.js", "style.scss"];
+const sampleFiles = { js: "index.js", css: "style.css", scss: "style.scss" };
 const content = `/* This is a sample file */`;
 
 //Scaffolding Tasks
